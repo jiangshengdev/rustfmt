@@ -879,6 +879,38 @@ impl<'b, 'a: 'b> FmtVisitor<'a> {
         self.visit_items_with_reordering(&ptr_vec_to_ref_vec(items));
     }
 
+    /// Returns true if the statement is a block or a control-flow construct
+    /// (e.g., `if`, `while`, `for`, `loop`, `match`, or block expressions).
+    fn is_block_or_control_stmt(&self, s: &Stmt<'_>) -> bool {
+        match &s.as_ast_node().kind {
+            ast::StmtKind::Expr(expr) | ast::StmtKind::Semi(expr) => {
+                matches!(
+                    expr.kind,
+                    ast::ExprKind::Block(..)
+                        | ast::ExprKind::If(..)
+                        | ast::ExprKind::While(..)
+                        | ast::ExprKind::ForLoop { .. }
+                        | ast::ExprKind::Loop(..)
+                        | ast::ExprKind::Match(..)
+                        | ast::ExprKind::TryBlock(..)
+                        | ast::ExprKind::ConstBlock(..)
+                        | ast::ExprKind::Gen(..)
+                )
+            }
+            _ => false,
+        }
+    }
+
+    /// Ensures that there is at least one blank line between two structured statements
+    /// (blocks or control-flow constructs).
+    fn ensure_blank_line_between(&mut self, prev: &Stmt<'_>, next: &Stmt<'_>) {
+        let span_between = mk_sp(prev.span().hi(), next.span().lo());
+        let gap = self.snippet(span_between);
+        if count_newlines(gap) < 2 {
+            self.push_str("\n");
+        }
+    }
+
     fn walk_stmts(&mut self, stmts: &[Stmt<'_>], include_current_empty_semi: bool) {
         if stmts.is_empty() {
             return;
@@ -914,6 +946,12 @@ impl<'b, 'a: 'b> FmtVisitor<'a> {
             } else {
                 false
             };
+            if stmts.len() > 1
+                && (self.is_block_or_control_stmt(&stmts[0])
+                    || self.is_block_or_control_stmt(&stmts[1]))
+            {
+                self.ensure_blank_line_between(&stmts[0], &stmts[1]);
+            }
 
             self.walk_stmts(&stmts[1..], include_next_empty);
         } else {
