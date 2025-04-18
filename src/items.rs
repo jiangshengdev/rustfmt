@@ -778,9 +778,43 @@ impl<'a> FmtVisitor<'a> {
                 prev_kind = Some(item.kind.clone());
             }
         } else {
+            let mut prev: Option<&ast::AssocItem> = None;
             for item in items {
+                if let Some(prev_item) = prev {
+                    if self.is_block_like_assoc_item(prev_item)
+                        || self.is_block_like_assoc_item(item)
+                    {
+                        self.ensure_blank_line_between_impl_items(prev_item, item);
+                    }
+                }
                 self.visit_impl_item(item);
+                prev = Some(item);
             }
+        }
+    }
+
+    /// Returns true if the impl item is a block-like item (fn/const/type/macro).
+    fn is_block_like_assoc_item(&self, item: &ast::AssocItem) -> bool {
+        matches!(
+            item.kind,
+            ast::AssocItemKind::Fn(..)
+                | ast::AssocItemKind::Const(..)
+                | ast::AssocItemKind::Type(..)
+                | ast::AssocItemKind::MacCall(..)
+        )
+    }
+
+    /// Ensures that there is at least one blank line between two impl items
+    /// if either is block-like.
+    fn ensure_blank_line_between_impl_items(
+        &mut self,
+        prev: &ast::AssocItem,
+        next: &ast::AssocItem,
+    ) {
+        let span_between = mk_sp(prev.span().hi(), next.span().lo());
+        let gap = self.snippet(span_between);
+        if count_newlines(gap) < 2 {
+            self.push_str("\n");
         }
     }
 }
