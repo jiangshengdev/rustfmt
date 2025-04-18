@@ -329,6 +329,7 @@ impl<'b, 'a: 'b> FmtVisitor<'a> {
     /// Visits and format the given items. Items are reordered If they are
     /// consecutive and reorderable.
     pub(crate) fn visit_items_with_reordering(&mut self, mut items: &[&ast::Item]) {
+        let mut prev_item: Option<&ast::Item> = None;
         while !items.is_empty() {
             // If the next item is a `use`, `extern crate` or `mod`, then extract it and any
             // subsequent items that have the same item kind to be reordered within
@@ -341,13 +342,64 @@ impl<'b, 'a: 'b> FmtVisitor<'a> {
                     item_kind.in_group(self.config),
                 );
                 let (_, rest) = items.split_at(visited_items_num);
+                // Insert blank line if needed
+                if let Some(next) = rest.first() {
+                    self.maybe_ensure_blank_between(prev_item, next);
+                }
+                if let Some(last) = items.get(visited_items_num - 1) {
+                    prev_item = Some(*last);
+                }
                 items = rest;
             } else {
                 // Reaching here means items were not reordered. There must be at least
                 // one item left in `items`, so calling `unwrap()` here is safe.
                 let (item, rest) = items.split_first().unwrap();
+                // Insert blank line if needed
+                self.maybe_ensure_blank_between(prev_item, item);
                 self.visit_item(item);
+                prev_item = Some(*item);
                 items = rest;
+            }
+        }
+    }
+
+    /// Returns true if the given AST item is a top-level or item-like construct
+    /// (e.g., function, struct, enum, module, trait, etc.) for which blank-line
+    /// separation may be applied during formatting.
+    fn is_item_like(item: &ast::Item) -> bool {
+        matches!(
+            item.kind,
+            ast::ItemKind::Fn(..)
+                | ast::ItemKind::Struct(..)
+                | ast::ItemKind::Enum(..)
+                | ast::ItemKind::Impl(..)
+                | ast::ItemKind::Trait(..)
+                | ast::ItemKind::Mod(..)
+                | ast::ItemKind::Union(..)
+                | ast::ItemKind::TyAlias(..)
+                | ast::ItemKind::Const(..)
+                | ast::ItemKind::Static(..)
+                | ast::ItemKind::MacroDef(..)
+                | ast::ItemKind::MacCall(..)
+        )
+    }
+
+    /// Ensures that at least one blank line is inserted between two items.
+    /// If the snippet between `prev` and `next` contains fewer than two newline
+    /// characters, an extra newline is pushed to the output.
+    fn ensure_blank_line_between_items(&mut self, prev: &ast::Item, next: &ast::Item) {
+        let span_between = mk_sp(prev.span().hi(), next.span().lo());
+        let gap = self.snippet(span_between);
+        if crate::utils::count_newlines(gap) < 2 {
+            self.push_str("\n");
+        }
+    }
+
+    /// Inserts a blank line between two items if needed
+    fn maybe_ensure_blank_between(&mut self, prev: Option<&ast::Item>, next: &ast::Item) {
+        if let Some(prev_item) = prev {
+            if Self::is_item_like(prev_item) || Self::is_item_like(next) {
+                self.ensure_blank_line_between_items(prev_item, next);
             }
         }
     }
