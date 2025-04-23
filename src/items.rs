@@ -714,7 +714,7 @@ impl<'a> FmtVisitor<'a> {
             .ok()
     }
 
-    fn visit_impl_items(&mut self, items: &[ptr::P<ast::AssocItem>]) {
+    pub(crate) fn visit_impl_items(&mut self, items: &[ptr::P<ast::AssocItem>]) {
         if self.get_context().config.reorder_impl_items() {
             type TyOpt = Option<ptr::P<ast::Ty>>;
             use crate::ast::AssocItemKind::*;
@@ -794,7 +794,7 @@ impl<'a> FmtVisitor<'a> {
     }
 
     /// Returns true if the impl item is a block-like item (fn/const/type/macro).
-    fn is_block_like_assoc_item(&self, item: &ast::AssocItem) -> bool {
+    pub(crate) fn is_block_like_assoc_item(&self, item: &ast::AssocItem) -> bool {
         matches!(
             item.kind,
             ast::AssocItemKind::Fn(..)
@@ -806,7 +806,7 @@ impl<'a> FmtVisitor<'a> {
 
     /// Ensures that there is at least one blank line between two impl items
     /// if either is block-like.
-    fn ensure_blank_line_between_impl_items(
+    pub(crate) fn ensure_blank_line_between_impl_items(
         &mut self,
         prev: &ast::AssocItem,
         next: &ast::AssocItem,
@@ -1337,9 +1337,8 @@ pub(crate) fn format_trait(
         visitor.block_indent = offset.block_only().block_indent(context.config);
         visitor.last_pos = block_span.lo() + BytePos(open_pos as u32);
 
-        for item in items {
-            visitor.visit_trait_item(item);
-        }
+        // Handle blank lines between block-like trait items
+        visitor.visit_trait_items(items);
 
         visitor.format_missing(item.span.hi() - BytePos(1));
 

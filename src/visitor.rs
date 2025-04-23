@@ -2,6 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 
+use rustc_ast::ptr;
 use rustc_ast::{ast, token::Delimiter, visit};
 use rustc_span::{BytePos, Ident, Pos, Span, symbol};
 use tracing::debug;
@@ -1064,6 +1065,20 @@ impl<'b, 'a: 'b> FmtVisitor<'a> {
             report: self.report.clone(),
             skip_context: self.skip_context.clone(),
             skipped_range: self.skipped_range.clone(),
+        }
+    }
+
+    /// Ensures blank lines between block-like associated items in a trait.
+    pub(crate) fn visit_trait_items(&mut self, items: &[ptr::P<ast::AssocItem>]) {
+        let mut prev: Option<&ast::AssocItem> = None;
+        for item in items {
+            if let Some(prev_item) = prev {
+                if self.is_block_like_assoc_item(prev_item) || self.is_block_like_assoc_item(item) {
+                    self.ensure_blank_line_between_impl_items(prev_item, item);
+                }
+            }
+            self.visit_trait_item(item);
+            prev = Some(item);
         }
     }
 }
